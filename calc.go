@@ -35,7 +35,7 @@ func main() {
 
 	wg := sync.WaitGroup{}
 	step := 2
-	for i := 0; i < 100; i += step {
+	for i := 0; i < 1; i += step {
 		wg.Add(step)
 		for j := i; j < i+step; j++ {
 			go func(j int) {
@@ -75,18 +75,57 @@ func ContinuousBetasForCode(path string, indexDates []string, rsIndex []float64,
 		newClosePrices = append(newClosePrices, closePrices[(i+1)*n-1])
 	}
 	fmt.Println("Same beginning index", sameIndex)
-	betas := ContinuousBetas(rs, rsIndex, ks, ksIndex, sameIndex)
-	//fmt.Println(len(newDates), len(betas))
+	continuousBetas := ContinuousBetas(rs, rsIndex, ks, ksIndex, sameIndex)
+	discountinuousBetas := DiscontinuousBetas(rs, rsIndex, sameIndex)
+	//fmt.Println(len(newDates), len(continuousBetas))
 	newDf := dataframe.New(series.New(newDates, series.String, "Date"),
 		series.New(newClosePrices, series.Float, "Close"),
-		series.New(betas, series.Float, "beta"))
+		series.New(continuousBetas, series.Float, "beta_c"),
+		series.New(discountinuousBetas, series.Float, "beta_d"))
 	//fmt.Println(newDf)
-
 	output, err := os.OpenFile("beta/"+path+".csv", os.O_CREATE, 0644)
 	if err != nil {
 		log.Println(err)
 	}
 	newDf.WriteCSV(output)
+}
+
+func DiscontinuousBetas(rs []float64, rsIndex []float64, sameIndex int) []float64 {
+	rsIndex = rsIndex[sameIndex:]
+
+	validDays := len(rs)/n - L
+
+	var betas = make([]float64, validDays)
+
+	t := time.Now()
+
+	wg := sync.WaitGroup{}
+	wg.Add(validDays)
+
+	for s := 0; s < validDays; s++ {
+		go func(s int) {
+			start := s * n
+			rsEnd := (s + L) * n
+			// be careful when using ks since len(ks) == len(rs) - n*L
+			beta := DiscontinuousBeta(rs[start:rsEnd], rsIndex[start:rsEnd])
+			betas[s] = beta
+			//fmt.Printf("Day %d beta = %f\n", s, beta)
+			wg.Done()
+		}(s)
+	}
+	wg.Wait()
+	fmt.Println("Compute Beta Time consumed:", time.Now().Sub(t).Seconds())
+	return betas
+}
+
+func DiscontinuousBeta(rs []float64, rsIndex []float64) float64 {
+	var dividend, divisor float64
+	for i := range rs {
+		dividend += math.Pow(rs[i]*rsIndex[i], 2)
+		divisor += math.Pow(rsIndex[i], 4)
+	}
+	beta := math.Sqrt(dividend / divisor)
+	return beta
 }
 
 func ContinuousBetas(rs []float64, rsIndex []float64, ks []float64, ksIndex []float64, sameIndex int) []float64 {
