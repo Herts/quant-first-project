@@ -83,11 +83,14 @@ func ContinuousBetasForCode(path string, indexDates []string, rsIndex []float64,
 		series.New(continuousBetas, series.Float, "beta_c"),
 		series.New(discountinuousBetas, series.Float, "beta_d"))
 	//fmt.Println(newDf)
-	output, err := os.OpenFile("beta/"+path+".csv", os.O_CREATE, 0644)
+	output, err := os.OpenFile("beta/"+path+".csv", os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Println(err)
 	}
-	newDf.WriteCSV(output)
+	err = newDf.WriteCSV(output)
+	if err != nil {
+		log.Println(err)
+	}
 }
 
 func DiscontinuousBetas(rs []float64, rsIndex []float64, sameIndex int) []float64 {
